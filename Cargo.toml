@@ -1,0 +1,9 @@
+[package]
+name = "zflate"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.70"
+clap = { version = "4.2.1", features = ["cargo", "derive", "deprecated"] }
+flate2 = { version = "1.0.25", default-features = false, features = ["zlib"] }
