@@ -27,9 +27,69 @@ struct Args {
     #[arg(short, long, value_name = "FILE")]
     output: Option<PathBuf>,
 
+    #[command(flatten)]
+    comp_level_args: CompressionLevelArgs,
+
     /// Input file(s). When no FILE, read standard input
     #[arg(value_name = "FILE")]
     files: Option<Vec<PathBuf>>,
+}
+
+#[derive(Debug, Clone, Copy, clap::Args)]
+#[group(required = false, multiple = false)]
+struct CompressionLevelArgs {
+    /// Compression level: use args -1 (fastest) through -9 (best)
+    ///
+    /// The default compression level is 6
+    #[arg(short = '1')]
+    level1: bool,
+
+    #[arg(short = '2', hide = true)]
+    level2: bool,
+    #[arg(short = '3', hide = true)]
+    level3: bool,
+    #[arg(short = '4', hide = true)]
+    level4: bool,
+    #[arg(short = '5', hide = true)]
+    level5: bool,
+    #[arg(short = '6', hide = true)]
+    level6: bool,
+    #[arg(short = '7', hide = true)]
+    level7: bool,
+    #[arg(short = '8', hide = true)]
+    level8: bool,
+    #[arg(short = '9', hide = true)]
+    level9: bool,
+}
+
+impl CompressionLevelArgs {
+    fn level(&self) -> u32 {
+        if self.level1 {
+            1
+        } else if self.level2 {
+            2
+        } else if self.level3 {
+            3
+        } else if self.level4 {
+            4
+        } else if self.level5 {
+            5
+        } else if self.level6 {
+            6
+        } else if self.level7 {
+            7
+        } else if self.level8 {
+            8
+        } else if self.level9 {
+            9
+        } else {
+            Compression::default().level()
+        }
+    }
+
+    fn compression(&self) -> Compression {
+        Compression::new(self.level())
+    }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -49,17 +109,15 @@ impl Default for Mode {
 }
 
 impl Mode {
-    fn compress<R, W>(self, input: &mut R, output: &mut W) -> io::Result<u64>
+    fn compress<R, W>(self, level: Compression, input: &mut R, output: &mut W) -> io::Result<u64>
     where
         R: BufRead + ?Sized,
         W: Write + ?Sized,
     {
-        // TODO: non-constant compression mode
-        let comp = Compression::default();
         match self {
-            Mode::Zlib => io::copy(&mut ZlibEncoder::new(input, comp), output),
-            Mode::Deflate => io::copy(&mut DeflateEncoder::new(input, comp), output),
-            Mode::Gzip => io::copy(&mut GzEncoder::new(input, comp), output),
+            Mode::Zlib => io::copy(&mut ZlibEncoder::new(input, level), output),
+            Mode::Deflate => io::copy(&mut DeflateEncoder::new(input, level), output),
+            Mode::Gzip => io::copy(&mut GzEncoder::new(input, level), output),
         }
     }
 
@@ -86,11 +144,12 @@ fn run() -> anyhow::Result<()> {
         None => Box::new(io::stdout()),
     };
 
+    let comp_level = args.comp_level_args.compression();
     let mut transcode = |input: &mut dyn BufRead| -> io::Result<u64> {
         if args.decompress {
             args.mode.decompress(input, &mut output)
         } else {
-            args.mode.compress(input, &mut output)
+            args.mode.compress(comp_level, input, &mut output)
         }
     };
 
