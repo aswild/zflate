@@ -9,7 +9,7 @@ use flate2::{
     Compression,
 };
 
-/// Compress or decompress zlib-formatted data streams
+/// Compress or decompress zlib, gzip, or raw DEFLATE data streams
 #[derive(Debug, Parser)]
 #[command(version)]
 struct Args {
@@ -23,73 +23,22 @@ struct Args {
     #[arg(short, long, value_enum, default_value_t, hide_possible_values = true)]
     mode: Mode,
 
+    /// Compression level: from 1 (fastest) to 9 (best)
+    #[arg(
+        short, long, value_name = "LEVEL",
+        default_value_t = Compression::default().level(),
+        value_parser = clap::value_parser!(u32).range(1..=9),
+        conflicts_with = "decompress",
+    )]
+    compression_level: u32,
+
     /// Output filename. When no FILE, write to standard output
     #[arg(short, long, value_name = "FILE")]
     output: Option<PathBuf>,
 
-    #[command(flatten)]
-    comp_level_args: CompressionLevelArgs,
-
     /// Input file(s). When no FILE, read standard input
     #[arg(value_name = "FILE")]
     files: Option<Vec<PathBuf>>,
-}
-
-#[derive(Debug, Clone, Copy, clap::Args)]
-#[group(required = false, multiple = false)]
-struct CompressionLevelArgs {
-    /// Compression level: use args -1 (fastest) through -9 (best)
-    ///
-    /// The default compression level is 6
-    #[arg(short = '1')]
-    level1: bool,
-
-    #[arg(short = '2', hide = true)]
-    level2: bool,
-    #[arg(short = '3', hide = true)]
-    level3: bool,
-    #[arg(short = '4', hide = true)]
-    level4: bool,
-    #[arg(short = '5', hide = true)]
-    level5: bool,
-    #[arg(short = '6', hide = true)]
-    level6: bool,
-    #[arg(short = '7', hide = true)]
-    level7: bool,
-    #[arg(short = '8', hide = true)]
-    level8: bool,
-    #[arg(short = '9', hide = true)]
-    level9: bool,
-}
-
-impl CompressionLevelArgs {
-    fn level(&self) -> u32 {
-        if self.level1 {
-            1
-        } else if self.level2 {
-            2
-        } else if self.level3 {
-            3
-        } else if self.level4 {
-            4
-        } else if self.level5 {
-            5
-        } else if self.level6 {
-            6
-        } else if self.level7 {
-            7
-        } else if self.level8 {
-            8
-        } else if self.level9 {
-            9
-        } else {
-            Compression::default().level()
-        }
-    }
-
-    fn compression(&self) -> Compression {
-        Compression::new(self.level())
-    }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -144,7 +93,7 @@ fn run() -> anyhow::Result<()> {
         None => Box::new(io::stdout()),
     };
 
-    let comp_level = args.comp_level_args.compression();
+    let comp_level = Compression::new(args.compression_level);
     let mut transcode = |input: &mut dyn BufRead| -> io::Result<u64> {
         if args.decompress {
             args.mode.decompress(input, &mut output)
